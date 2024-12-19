@@ -1,0 +1,101 @@
+"""
+Created on Mon Nov 10 14:10:00 2024
+@author: Fathe, Abdulrahman and Mohd Halim
+"""
+
+import tensorflow as tf
+import numpy as np
+
+from FeatureEncoder import FeatureEncoder
+
+class Attention(tf.keras.layers.Layer):
+    def __init__(self, units, num_att, r=2, initializer="glorot_uniform"):
+        super(Attention, self).__init__()
+        self.units = units # number of classes
+        self.num_att = num_att
+        self.r = r
+        self.initializer = initializer
+
+    def build(self, input_shape): # input_shape = (batch, n_features)
+        self.kernel = self.add_weight(shape=(self.num_att, input_shape[-1], self.units),
+                                      initializer=self.initializer,
+                                      trainable=True,
+                                      name='kernel') # shape = (num_att, n_features, n_classes)
+
+    def call(self, inputs): # input_shape = (batch, n_features)
+        z = tf.matmul(inputs, self.kernel) # (batch, n_features) dot (num_att, n_features, n_classes) = (num_att, batch, n_classes)
+        z = tf.nn.softmax(z, axis=-1) # (num_att, batch, n_classes)
+        # z = tf.nn.sigmoid(z)
+        
+        w = tf.math.exp(self.kernel * self.r) # amplify weights
+        outputs = tf.matmul(z, tf.transpose(w, perm=(0,2,1)))  # (num_att, batch, n_classes) dot (num_att, n_classes, n_features) = (num_att, batch, n_features)
+        # outputs = tf.reduce_mean(a, axis=1)  # shape = (batch, n_features)
+        return outputs # (num_att, batch, n_features)
+
+class IterativeFeatureExclusion(tf.keras.layers.Layer):
+    def __init__(self, n_features, n_classes, num_att=8, r=2):
+        super(IterativeFeatureExclusion, self).__init__()
+        self.attentions = [Attention(n_classes, num_att, r=r) for i in range(n_features)]
+        self.mask = np.ones((n_features,), dtype=np.int8)
+
+    def call(self, inputs):       # input shape = (batch, n_features)
+        input_scores = []
+        
+        for e, j in enumerate(self.attentions):
+            mask = self.mask.copy()
+            mask[e] = 0
+            inputs_masked = inputs * mask # shape = (num_att, batch, n_features)
+            z = tf.expand_dims(self.attentions[e](inputs_masked), axis=-1) # (num_att, batch, n_features, 1)
+            input_scores.append(z)
+            
+        input_scores = tf.concat(input_scores, axis=-1) # shape = (num_att, batch, n_features, n_features)
+        input_scores = tf.reduce_mean(input_scores, axis=[-1, 0]) # shape = (batch, n_features)
+        input_scores = tf.nn.softmax(input_scores, axis=-1) # shape = (batch, n_features)
+        # input_scores = tf.nn.sigmoid(input_scores) # shape = (batch, n_features)
+        return input_scores
+
+class IFENetClassifier(tf.keras.Model):
+    def __init__(self, **kwargs):
+        super(IFENetClassifier, self).__init__()
+        
+        n_features = kwargs['n_features']
+        n_classes = kwargs['n_classes']
+        num_att = kwargs['num_att']
+        r = kwargs['r']
+        ife_num_layers = kwargs['ife_num_layers']
+        clf_hidden_size = kwargs['clf_hidden_size']
+                
+        self.input_scores = None
+        self.n_features = n_features
+        self.preprocess = tf.keras.layers.BatchNormalization(input_shape=(self.n_features,), name='preprocess_batch_norm')
+        self.ife_attns = [IterativeFeatureExclusion(n_features, n_classes, num_att, r) for l in range(0,ife_num_layers)]
+        
+        self.fc_hidden = tf.keras.layers.Dense(units=clf_hidden_size, name='fc_hidden')
+        self.layernorm = tf.keras.layers.LayerNormalization(name='layer_norm')
+        self.relu = tf.keras.layers.ReLU(name='relu')
+        self.fc_out = tf.keras.layers.Dense(units=n_classes, name='fc_out')
+        self.softmax = tf.keras.layers.Softmax()
+
+    def call(self, inputs): # (batch, n_features)
+        x = self.preprocess(inputs) # (batch, n_features)
+        norm_inputs = x
+
+        for ife_attn in self.ife_attns:
+            score = ife_attn(x) # (batch, n_features)
+            x = x * score
+        
+        self.input_scores = score
+        x = norm_inputs * score
+        x = self.fc_hidden(x)
+        x = self.layernorm(x)
+        x = self.relu(x)
+        x = self.fc_out(x)
+        outputs = self.softmax(x)
+        return outputs
+
+    def build(self, input_shape):
+        x = tf.keras.Input(shape=(self.n_features,))
+        # x = tf.keras.layers.Input(shape=input_shape)
+        return tf.keras.models.Model(inputs=[x], outputs=self.call(x))
+
+
