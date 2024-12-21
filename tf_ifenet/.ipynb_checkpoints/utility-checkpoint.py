@@ -1,20 +1,20 @@
 """
-Created on Mon Nov 10 14:10:00 2024
+Created on Mon Nov 10 09:00:00 2024
 @author: Mohd Halim Mohd Noor
 """
 
 import tensorflow as tf
 import pandas as pd
 
-def dataframe_to_dataset(dataframe, target_columns, batch_size=128, shuffle=True):
+def dataframe_to_dataset(dataframe, target_columns, shuffle=True, batch_size=128):
     """
     Converts a Pandas DataFrame to a TensorFlow Dataset.
     
     Args:
         dataframe (pd.DataFrame): The input dataframe.
         target_columns (list): List of column names to use as targets.
-        batch_size (int): Batch size for the dataset.
         shuffle (bool): Whether to shuffle the dataset.
+        batch_size (int): Batch size for the dataset.
     
     Returns:
         tf.data.Dataset: A TensorFlow Dataset object.

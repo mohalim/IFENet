@@ -42,3 +42,5 @@ examples/saved_models/
 examples/checkpoints/
 datasets/
 scripts/
+
+examples/*.ipynb
