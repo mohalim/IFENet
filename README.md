@@ -4,7 +4,7 @@ IFENet is a deep learning model designed to enhance feature importance ranking i
 
 ## Usage
 
-```
+```python
 from models import IFENetClassifier
 from config import DataConfig, ModelConfig
 from utility import dataframe_to_dataset
