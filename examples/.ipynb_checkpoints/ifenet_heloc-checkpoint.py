@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../tf_ifenet")
+sys.path.append("../src/ifenet")
 
 import tensorflow as tf
 import numpy as np

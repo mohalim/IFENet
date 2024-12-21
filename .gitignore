@@ -40,7 +40,10 @@ Thumbs.db
 ############################
 examples/saved_models/
 examples/checkpoints/
+examples/.ipynb_checkpoints/
 datasets/
 scripts/
+src/ifenet/.ipynb_checkpoints/
+src/ifenet/__pycache__
 
 examples/*.ipynb
