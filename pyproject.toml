@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ifenet"
-version = "1.0.0"
+version = "0.9.0"
 authors = [
   { name="mohalim", email="mohalimnoor@gmail.com" },
 ]

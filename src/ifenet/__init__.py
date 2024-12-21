@@ -1,8 +1,8 @@
 """Package for IFENet."""
 
-__author__ = """Mohd Halim Mohd Noor"""
+__author__ = """Halim Noor"""
 __email__ = "halimnoor@usm.my"
-__version__ = "1.0.0"
+__version__ = "0.9.0"
 
 __all__ = ["utility", "config", "models"]
 
