@@ -45,6 +45,10 @@ src/ifenet/.ipynb_checkpoints/
 src/ifenet/__pycache__
 datasets/
 scripts/
+dist/
+tests/
 .ipynb_checkpoints/
 
+requirements.txt
 examples/*.ipynb
+

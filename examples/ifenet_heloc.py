@@ -9,9 +9,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 
 # Import the library
-from models import IFENetClassifier
-from config import DataConfig, ModelConfig
-from utility import dataframe_to_dataset
+from ifenet.models import IFENetClassifier
+from ifenet.config import DataConfig, ModelConfig
+from ifenet.utility import dataframe_to_dataset
 
 print(tf.__version__)
 

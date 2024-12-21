@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ifenet"
+version = "1.0.0"
+authors = [
+  { name="mohalim", email="mohalimnoor@gmail.com" },
+]
+description = "IFENet package"
+readme = "README.md"
+requires-python = ">=3.9.20"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords = ["neural network", "feature ranking", "machine learning"]
+dependencies = [
+    "tensorflow >= 2.13.1",
+    "numpy >= 1.23.5",
+    "pandas",
+]
+
+[project.urls]
+Homepage = "https://github.com/mohalim/IFENet"

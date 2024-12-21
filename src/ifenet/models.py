@@ -1,14 +1,13 @@
 """
 Created on Mon Nov 10 09:00:00 2024
 @author: Mohd Halim Mohd Noor
-Requirements: python-3.9.20, tensorflow-2.14.1, numpy-1.26.4, pandas-2.2.3
 """
 
 import tensorflow as tf
 import numpy as np
 import pandas as pd
 
-from config import DataConfig, ModelConfig
+from .config import DataConfig, ModelConfig
 from tensorflow.keras.saving import register_keras_serializable, serialize_keras_object, deserialize_keras_object
 from tensorflow.keras.layers import Lambda
 
