@@ -38,12 +38,13 @@ Thumbs.db
 
 # Ignore folders and files #
 ############################
+examples/.ipynb_checkpoints/
 examples/saved_models/
 examples/checkpoints/
-examples/.ipynb_checkpoints/
-datasets/
-scripts/
 src/ifenet/.ipynb_checkpoints/
 src/ifenet/__pycache__
+datasets/
+scripts/
+.ipynb_checkpoints/
 
 examples/*.ipynb
