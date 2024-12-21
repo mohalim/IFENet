@@ -49,6 +49,8 @@ dist/
 tests/
 .ipynb_checkpoints/
 
+.pypirc
+pyproject.toml
 requirements.txt
 examples/*.ipynb
 
