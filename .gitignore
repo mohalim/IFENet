@@ -38,7 +38,7 @@ Thumbs.db
 
 # Ignore folders and files #
 ############################
-examples/adult/
-examples/superconduct/
-examples/titanic/
-examples/telco/
+examples/saved_models/
+examples/checkpoints/
+datasets/
+scripts/
