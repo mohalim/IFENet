@@ -11,7 +11,7 @@ from .config import DataConfig, ModelConfig
 from tensorflow.keras.saving import register_keras_serializable, serialize_keras_object, deserialize_keras_object
 from tensorflow.keras.layers import Lambda
 
-@register_keras_serializable(name="_Attention")
+@register_keras_serializable(name="_attention")
 class _Attention(tf.keras.layers.Layer):
     """
     A custom attention layer in TensorFlow Keras that computes attention scores and weighted outputs 
@@ -41,7 +41,7 @@ class _Attention(tf.keras.layers.Layer):
         get_config():
             Returns the configuration of the layer, which includes the parameters used to initialize the layer.
     """
-    def __init__(self, units, attn_norm_fn, num_att, r=2, initializer="glorot_uniform", name=None, **kwargs):
+    def __init__(self, units, attn_norm_fn, num_att, r=2, initializer="glorot_uniform", name="_attention", **kwargs):
         super(_Attention, self).__init__()
         self.units = units # number of classes/responses
         self.attn_norm_fn = attn_norm_fn
@@ -53,11 +53,13 @@ class _Attention(tf.keras.layers.Layer):
         else:
             self.norm_function = tf.keras.layers.Softmax()
 
+        self.kernel = None
+
     def build(self, input_shape): # input_shape = (batch, n_features)
         self.kernel = self.add_weight(shape=(self.num_att, input_shape[-1], self.units),
                                       initializer=self.initializer,
                                       trainable=True,
-                                      name='kernel') # shape = (num_att, n_features, n_outputs)
+                                      name=f"{self.name}/kernel") # shape = (num_att, n_features, n_outputs)
 
     def call(self, inputs): # input_shape = (batch, n_features)
         z = tf.matmul(inputs, self.kernel) # (batch, n_features) dot (num_att, n_features, n_outputs) = (num_att, batch, n_outputs)
@@ -71,24 +73,30 @@ class _Attention(tf.keras.layers.Layer):
 
     def get_config(self):
         # Return the configuration parameters as a dictionary
-        config = super().get_config()
-        config.update(
-            {
+        config = super(_Attention, self).get_config()        
+        config.update({
             "units": self.units,
             "attn_norm_fn": self.attn_norm_fn,
             "num_att": self.num_att,
             "r": self.r,
-            "initializer": self.initializer
+            "initializer": self.initializer,            
             })
         return config
      
-    #@classmethod
-    #def from_config(cls, config):
-    #    return cls(**config)
+    @classmethod
+    def from_config(cls, config):
+        #layer = cls(
+        #    units = config["units"],
+        #    attn_norm_fn = config["attn_norm_fn"],
+        #    num_att = config["num_att"],
+        #    r = config["r"],
+        #    initializer = config["initializer"]
+        #)
+        return cls(**config)
 
-@register_keras_serializable(name="_IterativeFeatureExclusion")
+@register_keras_serializable(name="_iterativeFeatureExclusion")
 class _IterativeFeatureExclusion(tf.keras.layers.Layer):
-    def __init__(self, n_features, n_outputs, attn_norm_fn, num_att=8, r=2, name=None, **kwargs):
+    def __init__(self, n_features, n_outputs, attn_norm_fn, num_att=8, r=2, name="_iterativeFeatureExclusion", **kwargs):
         super(_IterativeFeatureExclusion, self).__init__()
 
         self.n_features = n_features
@@ -160,11 +168,12 @@ class _IterativeFeatureExclusion(tf.keras.layers.Layer):
         #layer.masks = masks
         return layer
 
-@register_keras_serializable(name="_IFEModule")
+@register_keras_serializable(name="_ifeModule")
 class _IFEModule(tf.keras.Model):
-    def __init__(self, data_config, model_config):
+    def __init__(self, data_config, model_config, name="_ifeModule", **kwargs):
         super(_IFEModule, self).__init__()
         self._attn_norm_fn = 'softmax'
+        self.is_built = False
 
         self._data_config = data_config
         self._model_config = model_config
@@ -249,6 +258,16 @@ class _IFEModule(tf.keras.Model):
             msg = "Please perform a prediction first to compute the feature importance scores."
             print("\033[91m {}\033[00m" .format(msg))
 
+    def fit(self, train_ds, validation_data=None, epochs=1, batch_size=None, verbose=1, callbacks=None):
+        """
+        Override fit to ensure model is built before training.
+        """
+        if not self.is_built:
+            raise ValueError("Model has not been built. Please run `model.build_model(train_ds)` before calling `fit()`.")
+
+        # Call the original fit() method (or perform custom training loop if needed)
+        super(_IFEModule, self).fit(train_ds, validation_data=validation_data, epochs=epochs, batch_size=batch_size, verbose=verbose, callbacks=callbacks)
+
     def get_config(self):
         base_config = super(_IFEModule, self).get_config()
         
@@ -280,9 +299,9 @@ class _IFEModule(tf.keras.Model):
         # Return the reconstructed model
         return instance
     
-@register_keras_serializable(name="IFENetRegressor")
+@register_keras_serializable(name="ifeNetRegressor")
 class IFENetRegressor(_IFEModule):
-    def __init__(self, data_config, model_config):
+    def __init__(self, data_config, model_config, name="ifeNetRegressor", **kwargs):
         super(IFENetRegressor, self).__init__(data_config, model_config)
 
         self.target_activation='linear'
@@ -302,7 +321,7 @@ class IFENetRegressor(_IFEModule):
         
         self._n_features = self._create_encoder_layers(dataset, feature_names, feature_dtypes)
 
-        self._preprocess = tf.keras.layers.BatchNormalization(name='preprocess_batch_norm')
+        self._preprocess = tf.keras.layers.BatchNormalization(name=f"{self.name}/preprocess_batch_norm")
 
         # Determine the number of responses
         targets = next(iter(dataset.map(lambda x,y: y))).numpy()
@@ -317,12 +336,13 @@ class IFENetRegressor(_IFEModule):
             clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
 
         if self._reduction == 'flatten':
-            self._reduction_layer = tf.keras.layers.Flatten()
+            self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
         elif self._reduction == 'average':
-            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D()
+            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
         
-        self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name='fc_hidden_layers')
-        self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name='fc_out')
+        self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
+        self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
+        self.is_built = True
         
     def call(self, inputs): # (batch, n_features)
         # preprocessing the inputs
@@ -409,9 +429,9 @@ class IFENetRegressor(_IFEModule):
     
         return instance
 
-@register_keras_serializable(name="IFENetClassifier")
+@register_keras_serializable(name="ifeNetClassifier")
 class IFENetClassifier(_IFEModule):
-    def __init__(self, data_config, model_config):
+    def __init__(self, data_config, model_config, name="ifeNetClassifier", **kwargs):
         super(IFENetClassifier, self).__init__(data_config, model_config)
 
         self.target_activation = 'softmax'
@@ -420,6 +440,7 @@ class IFENetClassifier(_IFEModule):
 
         self._clf_num_layers = self.model_config.clf_num_layers
         self._clf_hidden_units = self.model_config.clf_hidden_units
+        self._clf_dropout = self.model_config.clf_dropout
         self._reduction = self.model_config.reduction_layer
 
         self._n_features = 0
@@ -434,7 +455,7 @@ class IFENetClassifier(_IFEModule):
         
         self._n_features = self._create_encoder_layers(dataset, feature_names, feature_dtypes)
 
-        self._preprocess = tf.keras.layers.BatchNormalization(name='preprocess_batch_norm')
+        self._preprocess = tf.keras.layers.BatchNormalization(name=f"{self.name}/preprocess_batch_norm")
 
         # Determine the number of classes
         labels = next(iter(dataset.map(lambda x,y: y))).numpy()
@@ -446,15 +467,17 @@ class IFENetClassifier(_IFEModule):
         clf_hidden_layers = []
         for l in range(0, self._clf_num_layers):
             clf_hidden_layers.append(tf.keras.layers.Dense(units=self._clf_hidden_units[l], activation='relu'))
-            clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
+            #clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
+            clf_hidden_layers.append(tf.keras.layers.Dropout(rate=self._clf_dropout))
 
         if self._reduction == 'flatten':
-            self._reduction_layer = tf.keras.layers.Flatten()
+            self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
         elif self._reduction == 'average':
-            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D()
+            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
         
-        self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name='fc_hidden_layers')
-        self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name='fc_out')
+        self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
+        self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
+        self.is_built = True
     
     def call(self, inputs): # (batch, n_features)
         # preprocessing the inputs
@@ -498,6 +521,7 @@ class IFENetClassifier(_IFEModule):
             "target_activation": self.target_activation,
             "clf_num_layers": self._clf_num_layers,
             "clf_hidden_units": self._clf_hidden_units,
+            "clf_dropout": self._clf_dropout,
             "reduction": self._reduction,
             "feature_indices": self.feature_indices,   
             "reduction_layer": reduction_config,
@@ -522,6 +546,7 @@ class IFENetClassifier(_IFEModule):
         instance.target_activation = config["target_activation"]
         instance._clf_num_layers = config["clf_num_layers"]
         instance._clf_hidden_units = config["clf_hidden_units"]
+        instance._clf_dropout = config["clf_dropout"]
         instance._reduction = config["reduction"]
         instance._n_features = config["n_features"]        
         instance.feature_indices = config["feature_indices"]

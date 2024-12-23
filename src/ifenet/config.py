@@ -76,6 +76,7 @@ class ModelConfig():
         r: float = 3.0, 
         clf_num_layers: int = 1, 
         clf_hidden_units: List[int] = [64], 
+        clf_dropout: float = 0.3,
         reduction_layer: str = 'flatten'
     ):
         if not isinstance(num_att, int) or num_att <= 0:
@@ -104,6 +105,7 @@ class ModelConfig():
         #self.ife_num_layers = 1
         self.clf_num_layers = clf_num_layers
         self.clf_hidden_units = clf_hidden_units
+        self.clf_dropout = clf_dropout
         self.reduction_layer = reduction_layer
 
     def get_config(self):
@@ -114,6 +116,7 @@ class ModelConfig():
             #"ife_num_layers": self.ife_num_layers,
             "clf_num_layers": self.clf_num_layers,
             "clf_hidden_units": self.clf_hidden_units,
+            "clf_dropout": self.clf_dropout,
             "reduction_layer": self.reduction_layer
         }
         return config
@@ -125,5 +128,6 @@ class ModelConfig():
             config["r"],
             config["clf_num_layers"],
             config["clf_hidden_units"],
+            config["clf_dropout"],
             config["reduction_layer"]
         )
