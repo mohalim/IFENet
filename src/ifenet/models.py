@@ -305,11 +305,11 @@ class IFENetRegressor(_IFEModule):
         super(IFENetRegressor, self).__init__(data_config, model_config)
 
         self.target_activation='linear'
-        # self._data_config = data_config
         self._model_config = model_config
 
         self._clf_num_layers = self._model_config.clf_num_layers
         self._clf_hidden_units = self._model_config.clf_hidden_units
+        self._clf_dropout = self._model_config.clf_dropout
         self._reduction = self._model_config.reduction_layer
 
     def build_model(self, dataset):
@@ -333,7 +333,8 @@ class IFENetRegressor(_IFEModule):
         clf_hidden_layers = []
         for l in range(0, self._clf_num_layers):
             clf_hidden_layers.append(tf.keras.layers.Dense(units=self._clf_hidden_units[l], activation='relu'))
-            clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
+            #clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
+            clf_hidden_layers.append(tf.keras.layers.Dropout(rate=self._clf_dropout))
 
         if self._reduction == 'flatten':
             self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
@@ -435,13 +436,12 @@ class IFENetClassifier(_IFEModule):
         super(IFENetClassifier, self).__init__(data_config, model_config)
 
         self.target_activation = 'softmax'
-        self.data_config = data_config
-        self.model_config = model_config
+        self._model_config = model_config
 
-        self._clf_num_layers = self.model_config.clf_num_layers
-        self._clf_hidden_units = self.model_config.clf_hidden_units
-        self._clf_dropout = self.model_config.clf_dropout
-        self._reduction = self.model_config.reduction_layer
+        self._clf_num_layers = self._model_config.clf_num_layers
+        self._clf_hidden_units = self._model_config.clf_hidden_units
+        self._clf_dropout = self._model_config.clf_dropout
+        self._reduction = self._model_config.reduction_layer
 
         self._n_features = 0
 
@@ -467,7 +467,6 @@ class IFENetClassifier(_IFEModule):
         clf_hidden_layers = []
         for l in range(0, self._clf_num_layers):
             clf_hidden_layers.append(tf.keras.layers.Dense(units=self._clf_hidden_units[l], activation='relu'))
-            #clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
             clf_hidden_layers.append(tf.keras.layers.Dropout(rate=self._clf_dropout))
 
         if self._reduction == 'flatten':
