@@ -10,10 +10,10 @@ from config import DataConfig, ModelConfig
 from utility import dataframe_to_dataset
 
 # convert the training set DataFrame to tf.data.Dataset
-train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=batch_size)
+train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=256)
 
-data_config = DataConfig(categorical_column_names=cat_col_names, 
-                         numerical_column_names=num_col_names,
+data_config = DataConfig(categorical_column_names=cat_column_names, 
+                         numerical_column_names=num_column_names,
                          category_output_mode='one_hot',
                          is_normalization=False)
 
@@ -29,9 +29,10 @@ model = IFENetRegressor(data_config, model_config)
 
 model.build_model(train_ds)
 
-model.compile(optimizer=optimizer, loss=loss_fn, metrics=['accuracy'])
+model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
 
-model.fit(train_ds, validation_data=vald_ds, epochs=100, callbacks=callbacks)
+# train the model. A list of callbacks such as EarlyStopping, ModelCheckpoint can be passed to the .fit() method.
+model.fit(train_ds, validation_data=vald_ds, epochs=100)
 ```
 
 ## Required dependencies
