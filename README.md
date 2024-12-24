@@ -42,3 +42,5 @@ IFENet requires the following dependencies
 - TensorFlow >= 2.13.1
 
 ## Citation
+Shaninah, F.S.E., Baraka, A.M.A., Noor, M.H.M., 2024. Iterative Feature Exclusion Ranking for Deep Tabular Learning. [https://doi.org/10.48550/arXiv.2412.16442](https://arxiv.org/abs/2412.16442)
+
