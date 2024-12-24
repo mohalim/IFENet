@@ -43,4 +43,15 @@ IFENet requires the following dependencies
 
 ## Citation
 Shaninah, F.S.E., Baraka, A.M.A., Noor, M.H.M., 2024. Iterative Feature Exclusion Ranking for Deep Tabular Learning. [https://doi.org/10.48550/arXiv.2412.16442](https://arxiv.org/abs/2412.16442)
+```
+@misc{shaninah2024iterativefeatureexclusionranking,
+      title={Iterative Feature Exclusion Ranking for Deep Tabular Learning}, 
+      author={Fathi Said Emhemed Shaninah and AbdulRahman M. A. Baraka and Mohd Halim Mohd Noor},
+      year={2024},
+      eprint={2412.16442},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2412.16442}, 
+}
+```
 
