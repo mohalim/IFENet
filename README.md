@@ -37,7 +37,7 @@ model.fit(train_ds, validation_data=vald_ds, epochs=100)
 
 ## Required dependencies
 IFENet requires the following dependencies
-- Numpy >= 1.23.5
+- NumPy >= 1.23.5
 - Pandas >= 2.0.3
 - TensorFlow >= 2.13.1
 
