@@ -9,7 +9,7 @@ from models import IFENetClassifier
 from config import DataConfig, ModelConfig
 from utility import dataframe_to_dataset
 
-# convert the training set DataFrame to tf.data.Dataset
+# Convert the training set DataFrame to tf.data.Dataset
 train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=256)
 
 data_config = DataConfig(categorical_column_names=cat_column_names, 
@@ -31,7 +31,7 @@ model.build_model(train_ds)
 
 model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
 
-# train the model. A list of callbacks such as EarlyStopping, ModelCheckpoint can be passed to the .fit() method.
+# Train the model. A list of callbacks such as EarlyStopping, ModelCheckpoint can be passed to the .fit() method.
 model.fit(train_ds, validation_data=vald_ds, epochs=100)
 ```
 
