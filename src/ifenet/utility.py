@@ -32,6 +32,8 @@ def dataframe_to_dataset(dataframe, target_columns, shuffle=True, batch_size=128
                 raise KeyError(f"Target column '{target}' not found in the DataFrame.")
             if df_copy[target].dtypes == 'object':
                 df_copy[target] = df_copy[target].astype('category').cat.codes
+            if df_copy[target].dtypes == 'int32' or df_copy[target].dtypes == 'int64':
+                df_copy[target] = df_copy[target].astype('float32')
         
         # targets = df_copy.loc[:,target_columns]
         targets = df_copy[target_columns].copy()

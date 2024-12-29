@@ -172,7 +172,7 @@ class _IterativeFeatureExclusion(tf.keras.layers.Layer):
 class _IFEModule(tf.keras.Model):
     def __init__(self, data_config, model_config, name="_ifeModule", **kwargs):
         super(_IFEModule, self).__init__()
-        self._attn_norm_fn = 'softmax'
+        self._attn_norm_fn = None
         self.is_built = False
 
         self._data_config = data_config
@@ -304,6 +304,7 @@ class IFENetRegressor(_IFEModule):
     def __init__(self, data_config, model_config, name="ifeNetRegressor", **kwargs):
         super(IFENetRegressor, self).__init__(data_config, model_config)
 
+        self._attn_norm_fn = 'sigmoid'
         self.target_activation='linear'
         self._model_config = model_config
 
@@ -385,6 +386,7 @@ class IFENetRegressor(_IFEModule):
         config = {
             **base_config,
             "n_features": self._n_features,
+            "attn_norm_fn": self._attn_norm_fn,
             "target_activation": self.target_activation,
             "clf_num_layers": self._clf_num_layers,
             "clf_hidden_units": self._clf_hidden_units,
@@ -409,6 +411,7 @@ class IFENetRegressor(_IFEModule):
         instance = cls(data_config, model_config)
 
         # Set the custom configurations for IFENetRegressor
+        instance._attn_norm_fn = config["attn_norm_fn"]
         instance.target_activation = config["target_activation"]
         instance._clf_num_layers = config["clf_num_layers"]
         instance._clf_hidden_units = config["clf_hidden_units"]
@@ -435,6 +438,7 @@ class IFENetClassifier(_IFEModule):
     def __init__(self, data_config, model_config, name="ifeNetClassifier", **kwargs):
         super(IFENetClassifier, self).__init__(data_config, model_config)
 
+        self._attn_norm_fn = 'softmax'
         self.target_activation = 'softmax'
         self._model_config = model_config
 
@@ -517,6 +521,7 @@ class IFENetClassifier(_IFEModule):
         config = {
             **base_config,
             "n_features": self._n_features,
+            "attn_norm_fn": self._attn_norm_fn,
             "target_activation": self.target_activation,
             "clf_num_layers": self._clf_num_layers,
             "clf_hidden_units": self._clf_hidden_units,
@@ -538,10 +543,11 @@ class IFENetClassifier(_IFEModule):
         data_config = DataConfig.from_config(config['data_config'])
         model_config = ModelConfig.from_config(config['model_config'])
         
-        # Create an instance of IFENetRegressor with the restored configurations
+        # Create an instance of IFENetClassifier with the restored configurations
         instance = cls(data_config, model_config)
 
-        # Set the custom configurations for IFENetRegressor
+        # Set the custom configurations for IFENetClassifier
+        instance._attn_norm_fn = config["attn_norm_fn"]
         instance.target_activation = config["target_activation"]
         instance._clf_num_layers = config["clf_num_layers"]
         instance._clf_hidden_units = config["clf_hidden_units"]
