@@ -11,6 +11,7 @@ from .config import DataConfig, ModelConfig
 from tensorflow.keras.saving import register_keras_serializable, serialize_keras_object, deserialize_keras_object
 from tensorflow.keras.layers import Lambda
 
+
 @register_keras_serializable(name="_attention")
 class _Attention(tf.keras.layers.Layer):
     """
@@ -301,11 +302,11 @@ class _IFEModule(tf.keras.Model):
     
 @register_keras_serializable(name="ifeNetRegressor")
 class IFENetRegressor(_IFEModule):
-    def __init__(self, data_config, model_config, name="ifeNetRegressor", **kwargs):
+    def __init__(self, data_config, model_config, target_activation='linear', name="ifeNetRegressor", **kwargs):
         super(IFENetRegressor, self).__init__(data_config, model_config)
 
         self._attn_norm_fn = 'sigmoid'
-        self.target_activation='linear'
+        self.target_activation = target_activation
         self._model_config = model_config
 
         self._clf_num_layers = self._model_config.clf_num_layers
@@ -327,7 +328,7 @@ class IFENetRegressor(_IFEModule):
         # Determine the number of responses
         targets = next(iter(dataset.map(lambda x,y: y))).numpy()
         n_outputs = targets.shape[1]
-        
+
         self._ife_attn = _IterativeFeatureExclusion(self._n_features, n_outputs, self._attn_norm_fn, self._num_att, self._r)
 
         # Build the predictive layers
@@ -341,6 +342,8 @@ class IFENetRegressor(_IFEModule):
             self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
         elif self._reduction == 'average':
             self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
+        elif self._reduction == 'max':
+            self._reduction_layer = tf.keras.layers.GlobalMaxPooling1D(name=f"{self.name}/global_max_pooling")
         
         self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
         self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
@@ -349,23 +352,22 @@ class IFENetRegressor(_IFEModule):
     def call(self, inputs): # (batch, n_features)
         # preprocessing the inputs
         features = [self._encoder_layers[name](inputs[name]) for name in self._encoder_layers]
-        
         features = tf.concat(features, axis=1)
 
         # features are the preprocessed inputs
         batch_size = tf.shape(features)[0]
+
         x = self._preprocess(features) # (batch, n_features)
-        norm_inputs = x
-        norm_inputs = tf.broadcast_to(norm_inputs, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
+        
+        x_bcast = tf.broadcast_to(x, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
         
         self.input_scores = self._ife_attn(x)
-        x = norm_inputs * self.input_scores # (head, batch, n_features)
-
+        x = x_bcast * self.input_scores # (head, batch, n_features)
         x = tf.transpose(x, perm=(1,0,2)) # (batch, head, n_features)
         x = self._reduction_layer(x)
-
         x = self.clf_hidden_layers(x)
         outputs = self.fc_out(x)
+        
         return outputs
 
     def get_config(self):
@@ -435,11 +437,11 @@ class IFENetRegressor(_IFEModule):
 
 @register_keras_serializable(name="ifeNetClassifier")
 class IFENetClassifier(_IFEModule):
-    def __init__(self, data_config, model_config, name="ifeNetClassifier", **kwargs):
+    def __init__(self, data_config, model_config, target_activation='softmax', name="ifeNetClassifier", **kwargs):
         super(IFENetClassifier, self).__init__(data_config, model_config)
 
         self._attn_norm_fn = 'softmax'
-        self.target_activation = 'softmax'
+        self.target_activation = target_activation
         self._model_config = model_config
 
         self._clf_num_layers = self._model_config.clf_num_layers
@@ -464,7 +466,7 @@ class IFENetClassifier(_IFEModule):
         # Determine the number of classes
         labels = next(iter(dataset.map(lambda x,y: y))).numpy()
         n_outputs = np.size(np.unique(labels))
-        
+
         self._ife_attn = _IterativeFeatureExclusion(self._n_features, n_outputs, self._attn_norm_fn, self._num_att, self._r)
 
         # Build the predictive layers
@@ -477,6 +479,8 @@ class IFENetClassifier(_IFEModule):
             self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
         elif self._reduction == 'average':
             self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
+        elif self._reduction == 'max':
+            self._reduction_layer = tf.keras.layers.GlobalMaxPooling1D(name=f"{self.name}/global_max_pooling")
         
         self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
         self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
@@ -490,17 +494,16 @@ class IFENetClassifier(_IFEModule):
         # features are the preprocessed inputs
         batch_size = tf.shape(features)[0]
         x = self._preprocess(features) # (batch, n_features)
-        norm_inputs = x
-        norm_inputs = tf.broadcast_to(norm_inputs, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
+        
+        x_bcast = tf.broadcast_to(x, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
         
         self.input_scores = self._ife_attn(x)
-        x = norm_inputs * self.input_scores
-        
+        x = x_bcast * self.input_scores
         x = tf.transpose(x, perm=(1,0,2))
         x = self._reduction_layer(x)
-        
         x = self.clf_hidden_layers(x)
         outputs = self.fc_out(x)
+        
         return outputs
 
     def get_config(self):

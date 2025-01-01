@@ -68,7 +68,7 @@ class ModelConfig():
         clf_num_layers: Number of layers in the predictive layers. Must be 1 or greater.
         clf_hidden_units: Hidden units in the classification head. 
                           Must align with clf_num_layers.
-        reduction_layer: Method for dimensionality reduction ('flatten', 'average').
+        reduction_layer: Method for dimensionality reduction ('flatten', 'average', 'max').
     """
     def __init__(
         self, 
@@ -88,7 +88,7 @@ class ModelConfig():
         if not isinstance(clf_num_layers, int) or clf_num_layers < 1:
             raise ValueError("clf_num_layers must be an integer greater than or equal to 1.")
             
-        if reduction_layer not in {'flatten', 'average'}:
+        if reduction_layer not in {'flatten', 'average', 'max'}:
             raise ValueError("reduction_layer must be 'flatten' or 'average'")
 
         if not isinstance(clf_hidden_units, list) or not all(isinstance(unit, int) and unit > 0 for unit in clf_hidden_units):
@@ -102,7 +102,6 @@ class ModelConfig():
             
         self.num_att = num_att
         self.r = r
-        #self.ife_num_layers = 1
         self.clf_num_layers = clf_num_layers
         self.clf_hidden_units = clf_hidden_units
         self.clf_dropout = clf_dropout
@@ -113,7 +112,6 @@ class ModelConfig():
         config = {
             "num_att": self.num_att,
             "r": self.r,
-            #"ife_num_layers": self.ife_num_layers,
             "clf_num_layers": self.clf_num_layers,
             "clf_hidden_units": self.clf_hidden_units,
             "clf_dropout": self.clf_dropout,
