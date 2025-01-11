@@ -12,9 +12,10 @@ from utility import dataframe_to_dataset
 # Convert the training set DataFrame to tf.data.Dataset
 train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=256)
 
-data_config = DataConfig(categorical_column_names=cat_column_names, 
-                         numerical_column_names=num_column_names,
-                         category_output_mode='one_hot',
+data_config = DataConfig(categorical_column_names=cat_col_names, 
+                         numerical_column_names=num_col_names,
+                         encode_category = 'embedding',
+                         embedding_output_dim = 'auto',
                          is_normalization=False)
 
 model_config = ModelConfig(num_att=16,
