@@ -3,7 +3,7 @@ Created on Mon Nov 10 09:00:00 2024
 @author: Mohd Halim Mohd Noor
 """
 
-from typing import List, Optional
+from typing import List, Union, Optional
 
 class DataConfig():
     """
@@ -12,13 +12,17 @@ class DataConfig():
     Attributes:
         categorical_column_names: List of categorical column names.
         numerical_column_names: List of numerical column names.
-        category_output_mode: How categorical features are encoded ('one_hot', 'multi_hot', etc.).
-        is_normalization: Whether to normalize numerical features.
+        encode_category: Encode categorical features ('embedding', 'category').
+        embedding_output_dim: Embedding output dimension. ('auto' or a positive integer).
+        category_output_mode: How categorical features are encoded ('one_hot', 'multi_hot').
+        is_normalization: Whether to normalize numerical features (True or False).
     """
     def __init__(
         self, 
         categorical_column_names: List[str], 
         numerical_column_names: List[str],  
+        encode_category: str = 'embedding',
+        embedding_output_dim: Union[str, int] = 'auto',
         category_output_mode: str = 'one_hot', 
         is_normalization: bool = False
     ):
@@ -27,15 +31,27 @@ class DataConfig():
         
         if not isinstance(numerical_column_names, list) or not all(isinstance(col, str) for col in numerical_column_names):
             raise TypeError("numerical_column_names must be a list of strings.")
-        
-        if category_output_mode not in {'one_hot', 'multi_hot'}:
-            raise ValueError("category_output_mode must be 'one_hot' or 'multi_hot'")
+
+        if encode_category not in {'embedding', 'category'}:
+            raise ValueError("encode_category must be 'embedding' or 'category'.")
 
         if not isinstance(is_normalization, bool):
             raise TypeError("is_normalization must be a boolean value.")
+
+        if encode_category == 'embedding':
+            if isinstance(embedding_output_dim, str) and embedding_output_dim != 'auto':
+                raise ValueError("embedding_output_dim must be 'auto' or an integer.")
+            elif isinstance(embedding_output_dim, int) and embedding_output_dim < 0:
+                raise ValueError("embedding_output_dim must be 'auto' or an integer. If embedding_output_dim is an integer, it must be greater than 0.")
+
+        if encode_category == 'category':
+            if category_output_mode not in {'one_hot', 'multi_hot'}:
+                raise ValueError("category_output_mode must be 'one_hot' or 'multi_hot'.")
         
         self.categorical_column_names = categorical_column_names
         self.numerical_column_names = numerical_column_names
+        self.encode_category = encode_category
+        self.embedding_output_dim = embedding_output_dim
         self.category_output_mode = category_output_mode
         self.is_normalization = is_normalization
         
@@ -44,6 +60,8 @@ class DataConfig():
         config = {
             "categorical_column_names": self.categorical_column_names,
             "numerical_column_names": self.numerical_column_names,
+            "encode_category": self.encode_category,
+            "embedding_output_dim": self.embedding_output_dim,
             "category_output_mode": self.category_output_mode,
             "is_normalization": self.is_normalization
         }
@@ -54,6 +72,8 @@ class DataConfig():
         return cls(
             config["categorical_column_names"],
             config["numerical_column_names"],
+            config["encode_category"],
+            config["embedding_output_dim"],
             config["category_output_mode"],
             config["is_normalization"]
         )
@@ -72,15 +92,15 @@ class ModelConfig():
     """
     def __init__(
         self, 
-        num_att: int = 16, 
+        num_att: int = 8, 
         r: float = 3.0, 
         clf_num_layers: int = 1, 
-        clf_hidden_units: List[int] = [64], 
+        clf_hidden_units: List[int] = [32], 
         clf_dropout: float = 0.3,
-        reduction_layer: str = 'flatten'
     ):
+        
         if not isinstance(num_att, int) or num_att <= 0:
-            raise ValueError("num_att must be a positive integer.")
+            raise ValueError("num_att must be a positive integer and greater than 0.")
 
         if not isinstance(r, (float, int)) or r < 1:
             raise ValueError("r must be a float or integer greater than or equal to 1.")
@@ -88,9 +108,6 @@ class ModelConfig():
         if not isinstance(clf_num_layers, int) or clf_num_layers < 1:
             raise ValueError("clf_num_layers must be an integer greater than or equal to 1.")
             
-        if reduction_layer not in {'flatten', 'average', 'max'}:
-            raise ValueError("reduction_layer must be 'flatten' or 'average'")
-
         if not isinstance(clf_hidden_units, list) or not all(isinstance(unit, int) and unit > 0 for unit in clf_hidden_units):
             raise TypeError("clf_hidden_units must be a list of positive integers.")
             
@@ -99,13 +116,15 @@ class ModelConfig():
                 f"clf_hidden_units must have exactly {clf_num_layers} elements. "
                 f"Got {len(clf_hidden_units)} elements instead."
             )
+
+        if not isinstance(clf_dropout, float) or (clf_dropout < 0.0 and clf_dropout >= 1.0):
+            raise ValueError("clf_dropout must be a positive float and less than 1.0.")
             
         self.num_att = num_att
         self.r = r
         self.clf_num_layers = clf_num_layers
         self.clf_hidden_units = clf_hidden_units
         self.clf_dropout = clf_dropout
-        self.reduction_layer = reduction_layer
 
     def get_config(self):
         # Return the configuration parameters as a dictionary
@@ -115,7 +134,6 @@ class ModelConfig():
             "clf_num_layers": self.clf_num_layers,
             "clf_hidden_units": self.clf_hidden_units,
             "clf_dropout": self.clf_dropout,
-            "reduction_layer": self.reduction_layer
         }
         return config
         
@@ -127,5 +145,4 @@ class ModelConfig():
             config["clf_num_layers"],
             config["clf_hidden_units"],
             config["clf_dropout"],
-            config["reduction_layer"]
         )

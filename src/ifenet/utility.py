@@ -26,6 +26,9 @@ def dataframe_to_dataset(dataframe, target_columns, shuffle=True, batch_size=128
     
     try:
         df_copy = dataframe.copy()
+
+        for column in df_copy.select_dtypes(include=['object']).columns:
+            df_copy[column] = df_copy[column].str.strip()
         
         for target in target_columns:
             if target not in df_copy.columns:
@@ -50,3 +53,14 @@ def dataframe_to_dataset(dataframe, target_columns, shuffle=True, batch_size=128
         
     except KeyError:
         raise KeyError(f"Target column '{e.args[0]}' is missing from the DataFrame.")
+
+def decode_list(loaded_list):
+    decoded_list = []
+    for item in loaded_list:
+        if isinstance(item, dict) and 'config' in item and 'value' in item['config']:
+            val = bytes(item['config']['value'], 'utf-8')
+            decoded_list.append(val)
+        else:
+            val = bytes(item, 'utf-8')
+            decoded_list.append(item)
+    return decoded_list

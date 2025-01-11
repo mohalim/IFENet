@@ -7,167 +7,10 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 
-from .config import DataConfig, ModelConfig
 from tensorflow.keras.saving import register_keras_serializable, serialize_keras_object, deserialize_keras_object
-from tensorflow.keras.layers import Lambda
+from .config import DataConfig, ModelConfig
+from .layers import _Attention, _IterativeFeatureExclusion, _CategoricalEncodingLayer, _NumericalEncodingLayer
 
-
-@register_keras_serializable(name="_attention")
-class _Attention(tf.keras.layers.Layer):
-    """
-    A custom attention layer in TensorFlow Keras that computes attention scores and weighted outputs 
-    based on a kernel and an attention normalization function.
-
-    This layer uses an attention mechanism to compute weighted feature outputs from input data based on 
-    a learned kernel and a specified normalization function (sigmoid or softmax). The resulting attention-weighted
-    outputs can be used in downstream tasks like classification or regression.
-
-    Attributes:
-        units (int): The number of units (e.g., classes or responses) in the output.
-        attn_norm_fn (str): The normalization function for attention scores. Can be 'sigmoid' or 'softmax'.
-        num_att (int): The number of attention heads or attention vectors.
-        r (float): A scaling factor for amplifying the attention weights.
-        initializer (str): The initializer to use for the kernel weights (default is 'glorot_uniform').
-        kernel (tf.Tensor): The learned kernel weights that represent the attention mechanism.
-        norm_function (tf.keras.layers.Layer): The attention normalization function (sigmoid or softmax).
-
-    Methods:
-        build(input_shape):
-            Initializes the kernel weight matrix based on the input shape and the number of attention heads.
-        
-        call(inputs):
-            Computes the attention-weighted output by applying the kernel to the inputs, normalizing the result 
-            using the specified function, and amplifying the attention weights.
-
-        get_config():
-            Returns the configuration of the layer, which includes the parameters used to initialize the layer.
-    """
-    def __init__(self, units, attn_norm_fn, num_att, r=2, initializer="glorot_uniform", name="_attention", **kwargs):
-        super(_Attention, self).__init__()
-        self.units = units # number of classes/responses
-        self.attn_norm_fn = attn_norm_fn
-        self.num_att = num_att
-        self.r = r
-        self.initializer = initializer
-        if self.attn_norm_fn == 'sigmoid':
-            self.norm_function = tf.keras.layers.Activation(activation='sigmoid')
-        else:
-            self.norm_function = tf.keras.layers.Softmax()
-
-        self.kernel = None
-
-    def build(self, input_shape): # input_shape = (batch, n_features)
-        self.kernel = self.add_weight(shape=(self.num_att, input_shape[-1], self.units),
-                                      initializer=self.initializer,
-                                      trainable=True,
-                                      name=f"{self.name}/kernel") # shape = (num_att, n_features, n_outputs)
-
-    def call(self, inputs): # input_shape = (batch, n_features)
-        z = tf.matmul(inputs, self.kernel) # (batch, n_features) dot (num_att, n_features, n_outputs) = (num_att, batch, n_outputs)
-        # z = tf.nn.softmax(z, axis=-1) # (num_att, batch, n_outputs)
-        z = self.norm_function(z) # (num_att, batch, n_outputs)
-        
-        w = tf.math.exp(self.kernel * self.r) # amplify attention weights
-        outputs = tf.matmul(z, tf.transpose(w, perm=(0,2,1)))  # (num_att, batch, n_outputs) dot (num_att, n_outputs, n_features) = (num_att, batch, n_features)
-        # outputs = tf.reduce_mean(a, axis=[1])  # shape = (batch, n_features)
-        return outputs # (num_att, batch, n_features)
-
-    def get_config(self):
-        # Return the configuration parameters as a dictionary
-        config = super(_Attention, self).get_config()        
-        config.update({
-            "units": self.units,
-            "attn_norm_fn": self.attn_norm_fn,
-            "num_att": self.num_att,
-            "r": self.r,
-            "initializer": self.initializer,            
-            })
-        return config
-     
-    @classmethod
-    def from_config(cls, config):
-        #layer = cls(
-        #    units = config["units"],
-        #    attn_norm_fn = config["attn_norm_fn"],
-        #    num_att = config["num_att"],
-        #    r = config["r"],
-        #    initializer = config["initializer"]
-        #)
-        return cls(**config)
-
-@register_keras_serializable(name="_iterativeFeatureExclusion")
-class _IterativeFeatureExclusion(tf.keras.layers.Layer):
-    def __init__(self, n_features, n_outputs, attn_norm_fn, num_att=8, r=2, name="_iterativeFeatureExclusion", **kwargs):
-        super(_IterativeFeatureExclusion, self).__init__()
-
-        self.n_features = n_features
-        self.n_outputs = n_outputs
-        self.attn_norm_fn = attn_norm_fn
-        self.num_att = num_att
-        self.r = r
-        
-        self.attentions = [_Attention(self.n_outputs, self.attn_norm_fn, self.num_att, self.r) for i in range(self.n_features)]
-        mask_ones = np.ones((n_features,), dtype=np.int8)
-        self.masks = []
-        for j in range(0,n_features):
-            mask = mask_ones.copy()
-            mask[j] = 0
-            self.masks.append(tf.constant(mask, dtype=tf.float32))
-        #self.masks = tf.stack(self.masks, axis=1)
-
-    def call(self, inputs):       # input shape = (batch, n_features)
-        input_scores = []
-        for mask, attention in zip(self.masks,self.attentions):
-            inputs_masked = inputs * mask # shape = (num_att, batch, n_features)
-            z = tf.expand_dims(attention(inputs_masked), axis=-1) # (num_att, batch, n_features, 1)
-            input_scores.append(z)
-            
-        input_scores = tf.concat(input_scores, axis=-1) # shape = (num_att, batch, n_features, n_features)
-        input_scores = tf.reduce_mean(input_scores, axis=[-1]) # shape = (num_att, batch, n_features)
-        input_scores = tf.nn.softmax(input_scores, axis=-1) # shape = (num_att, batch, n_features)
-        return input_scores
-
-    def get_config(self):
-        # Serialize the list of attention layers using serialize_keras_object
-        attention_configs = [serialize_keras_object(attn) for attn in self.attentions]
-
-        # Convert masks into a list of arrays
-        #masks = [mask.numpy() for mask in self.masks]
-
-        # Return a configuration dictionary including parameters and serialized layers
-        base_config = super(_IterativeFeatureExclusion, self).get_config()
-        config = {
-            **base_config,
-            "n_features": self.n_features,
-            "n_outputs": self.n_outputs,
-            "attn_norm_fn": self.attn_norm_fn,
-            "num_att": self.num_att,
-            "r": self.r,
-            "attentions": attention_configs,  # serialized attention layers
-            #"masks": masks  # serialized masks
-        }
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        # Reconstruct the attention layers from the serialized configurations
-        attentions = [deserialize_keras_object(attn_config) for attn_config in config["attentions"]]
-
-        # Reconstruct masks
-        #masks = [tf.constant(mask, dtype=tf.float32) for mask in config["masks"]]
-
-        # Reconstruct the layer
-        layer = cls(
-            n_features=config["n_features"],
-            n_outputs=config["n_outputs"],
-            attn_norm_fn=config["attn_norm_fn"],
-            num_att=config["num_att"],
-            r=config["r"]
-        )
-        # Assign the reconstructed attentions and masks to the layer
-        layer.attentions = attentions
-        #layer.masks = masks
-        return layer
 
 @register_keras_serializable(name="_ifeModule")
 class _IFEModule(tf.keras.Model):
@@ -181,12 +24,13 @@ class _IFEModule(tf.keras.Model):
 
         self._categorical_column_names = self._data_config.categorical_column_names
         self._numerical_column_names = self._data_config.numerical_column_names
+        self._encode_category = self._data_config.encode_category
+        self._embedding_output_dim = self._data_config.embedding_output_dim
         self._category_output_mode = self._data_config.category_output_mode
         self._is_normalization = self._data_config.is_normalization
         
         self._num_att = self._model_config.num_att
         self._r = self._model_config.r
-        # self._ife_num_layers = model_config.ife_num_layers
 
         self._n_features = 0
         self._encoder_layers = {}
@@ -194,38 +38,22 @@ class _IFEModule(tf.keras.Model):
         self.data_batch = None
         self.feature_indices = {}
         self.input_scores = None
-
-    def _get_category_encoding_layer(self, name, dataset, dtype, max_tokens=None):
-        feature_ds = dataset.map(lambda x, y: x[name])
-        if dtype == tf.string:
-            index = tf.keras.layers.StringLookup(max_tokens=max_tokens)
-        elif dtype == tf.int64:
-            index = tf.keras.layers.IntegerLookup(max_tokens=max_tokens)
-        
-        index.adapt(feature_ds)
-        encoder = tf.keras.layers.CategoryEncoding(num_tokens=index.vocabulary_size(), output_mode=self._category_output_mode, name=name)
-        return lambda feature: encoder(index(feature))
     
-    def _get_numerical_encoding_layer(self, name, dataset):
-        feature_ds = dataset.map(lambda x, y: x[name])
-        
-        if self._is_normalization:
-            encoder = tf.keras.layers.Normalization(axis=None)
-            encoder.adapt(feature_ds)
-            return lambda feature: encoder(feature)
-            return encoder
-        else:
-            return lambda feature: tf.cast(feature, dtype=tf.float32)
-        
     def _create_encoder_layers(self, dataset, feature_names, feature_dtypes):
         for name in feature_names:
             if name in self._categorical_column_names:
-                layer = Lambda(self._get_category_encoding_layer(name, dataset, feature_dtypes[name]))
+                # print(f'feature name: {name}')
+                feature_ds = dataset.map(lambda x, y: x[name])
+                layer = _CategoricalEncodingLayer(self._encode_category, self._embedding_output_dim, self._category_output_mode, 
+                                                  feature_ds, feature_dtypes[name], name="_categoricalEncodingLayer_"+name)
                 self._encoder_layers[name] = layer
+            
             elif name in self._numerical_column_names:
-                layer = Lambda(self._get_numerical_encoding_layer(name, dataset))
+                # print(f'feature name: {name}')
+                feature_ds = dataset.map(lambda x, y: x[name])
+                layer = _NumericalEncodingLayer(self._is_normalization, feature_ds, name="_numericalEncodingLayer_"+name)
                 self._encoder_layers[name] = layer
-
+                
         st = 0
         ed = 0
         n_features = 0
@@ -242,10 +70,8 @@ class _IFEModule(tf.keras.Model):
         return n_features
 
     def get_feature_importance(self):
-        if not tf.is_symbolic_tensor(self.input_scores):
-            #self(self.data_batch)
-            reduction = (0, 1)
-            feature_scores = np.mean(self.input_scores, axis=reduction)
+        if not tf.is_symbolic_tensor(self.input_scores): # input(batch, n_features, 1)
+            feature_scores = np.mean(self.input_scores, axis=0)
             score = 0
             feat_rank = {}
             for feature, indices in self.feature_indices.items():
@@ -276,14 +102,11 @@ class _IFEModule(tf.keras.Model):
         data_config_dict = self._data_config.get_config()
         model_config_dict = self._model_config.get_config()
         
-        # encoder_layers_config = {name: serialize_keras_object(layer) for name, layer in self._encoder_layers.items()}
-
         # Return the complete configuration
         config = {
             **base_config,
             "data_config": data_config_dict,
             "model_config": model_config_dict,
-            #"encoder_layers": encoder_layers_config,
         }
         
         return config
@@ -291,8 +114,8 @@ class _IFEModule(tf.keras.Model):
     @classmethod
     def from_config(cls, config):
         # Deserialize the DataConfig and ModelConfig
-        data_config = DataConfig.from_config(config['data_config'])
-        model_config = ModelConfig.from_config(config['model_config'])
+        data_config = DataConfig.from_config(config["data_config"])
+        model_config = ModelConfig.from_config(config["model_config"])
 
         # Create an instance of _IFEModule
         instance = cls(data_config, model_config)
@@ -312,7 +135,6 @@ class IFENetRegressor(_IFEModule):
         self._clf_num_layers = self._model_config.clf_num_layers
         self._clf_hidden_units = self._model_config.clf_hidden_units
         self._clf_dropout = self._model_config.clf_dropout
-        self._reduction = self._model_config.reduction_layer
 
     def build_model(self, dataset):
         if not isinstance(dataset, tf.data.Dataset):
@@ -337,36 +159,24 @@ class IFENetRegressor(_IFEModule):
             clf_hidden_layers.append(tf.keras.layers.Dense(units=self._clf_hidden_units[l], activation='relu'))
             #clf_hidden_layers.append(tf.keras.layers.BatchNormalization())
             clf_hidden_layers.append(tf.keras.layers.Dropout(rate=self._clf_dropout))
-
-        if self._reduction == 'flatten':
-            self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
-        elif self._reduction == 'average':
-            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
-        elif self._reduction == 'max':
-            self._reduction_layer = tf.keras.layers.GlobalMaxPooling1D(name=f"{self.name}/global_max_pooling")
         
         self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
         self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
         self.is_built = True
         
-    def call(self, inputs): # (batch, n_features)
+    def call(self, inputs, training=False): # (batch, n_features)
         # preprocessing the inputs
-        features = [self._encoder_layers[name](inputs[name]) for name in self._encoder_layers]
+        features = [self._encoder_layers[name](inputs[name], training=training) for name in self._encoder_layers]
         features = tf.concat(features, axis=1)
 
         # features are the preprocessed inputs
-        batch_size = tf.shape(features)[0]
-
-        x = self._preprocess(features) # (batch, n_features)
+        # batch_size = tf.shape(features)[0]
+        x = self._preprocess(features, training=training) # (batch, n_features)
         
-        x_bcast = tf.broadcast_to(x, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
-        
-        self.input_scores = self._ife_attn(x)
-        x = x_bcast * self.input_scores # (head, batch, n_features)
-        x = tf.transpose(x, perm=(1,0,2)) # (batch, head, n_features)
-        x = self._reduction_layer(x)
-        x = self.clf_hidden_layers(x)
-        outputs = self.fc_out(x)
+        self.input_scores = self._ife_attn(x, training=training)
+        x = x * self.input_scores
+        x = self.clf_hidden_layers(x, training=training)
+        outputs = self.fc_out(x, training=training)
         
         return outputs
 
@@ -375,15 +185,17 @@ class IFENetRegressor(_IFEModule):
         base_config = super(IFENetRegressor, self).get_config()
 
         # Serialize the layer configurations for the layers created in build_model
-        preprocess_config = self._preprocess.get_config()  
+        preprocess_config = self._preprocess.get_config()
         ife_attn_config = self._ife_attn.get_config()  
-        reduction_config = self._reduction_layer.get_config()
-        # clf_hidden_layers_config = [layer.get_config() for layer in self.clf_hidden_layers.layers]
         clf_hidden_layers_config = self.clf_hidden_layers.get_config()
         fc_out_config = self.fc_out.get_config()
 
         # Serialize the encoder layers (which are created dynamically)
-        encoder_layers_config = {name: serialize_keras_object(layer) for name, layer in self._encoder_layers.items()}
+        # encoder_layers_config = {name: serialize_keras_object(layer) for name, layer in self._encoder_layers.items()}
+        encoder_layers_config = {name: layer.get_config() for name, layer in self._encoder_layers.items()}
+        encoder_layers_classes = {
+            name: layer.__class__.__name__ for name, layer in self._encoder_layers.items()
+        }
 
         config = {
             **base_config,
@@ -392,14 +204,13 @@ class IFENetRegressor(_IFEModule):
             "target_activation": self.target_activation,
             "clf_num_layers": self._clf_num_layers,
             "clf_hidden_units": self._clf_hidden_units,
-            "reduction": self._reduction,
             "feature_indices": self.feature_indices,
-            "reduction_layer": reduction_config,
             "preprocess_config": preprocess_config,
             "ife_attn_config": ife_attn_config,
             "clf_hidden_layers_config": clf_hidden_layers_config,
             "fc_out_config": fc_out_config,
-            "encoder_layers": encoder_layers_config,
+            "encoder_layers_config": encoder_layers_config,
+            "encoder_layers_classes": encoder_layers_classes
         }
         return config
 
@@ -417,7 +228,6 @@ class IFENetRegressor(_IFEModule):
         instance.target_activation = config["target_activation"]
         instance._clf_num_layers = config["clf_num_layers"]
         instance._clf_hidden_units = config["clf_hidden_units"]
-        instance._reduction = config["reduction"]
         instance._n_features = config["n_features"]
         instance.feature_indices = config["feature_indices"]
     
@@ -427,11 +237,21 @@ class IFENetRegressor(_IFEModule):
         instance.clf_hidden_layers = tf.keras.Sequential.from_config(config["clf_hidden_layers_config"])
         instance.fc_out = tf.keras.layers.Dense.from_config(config["fc_out_config"])
 
-        instance._reduction_layer = tf.keras.layers.Flatten() if instance._reduction == "flatten" else tf.keras.layers.GlobalAveragePooling1D()
-
         # Deserialize the encoder layers and assign them to the model
-        encoder_layers = {name: deserialize_keras_object(layer_config) for name, layer_config in config["encoder_layers"].items()}
-        instance._encoder_layers = encoder_layers
+        #encoder_layers = {name: deserialize_keras_object(layer_config) for name, layer_config in config["encoder_layers"].items()}
+        #instance._encoder_layers = encoder_layers
+        encoder_layers_config = config["encoder_layers_config"]
+        encoder_layers_classes = config["encoder_layers_classes"]
+        for name, layer_class_name in encoder_layers_classes.items():
+            if layer_class_name == "_CategoricalEncodingLayer":
+                layer_class = _CategoricalEncodingLayer
+            elif layer_class_name == "_NumericalEncodingLayer":
+                layer_class = _NumericalEncodingLayer
+            else:
+                raise ValueError(f"Unknown encoder layer class: {layer_class_name}")
+    
+            layer = layer_class.from_config(encoder_layers_config[name])
+            instance._encoder_layers[name] = layer
     
         return instance
 
@@ -447,7 +267,6 @@ class IFENetClassifier(_IFEModule):
         self._clf_num_layers = self._model_config.clf_num_layers
         self._clf_hidden_units = self._model_config.clf_hidden_units
         self._clf_dropout = self._model_config.clf_dropout
-        self._reduction = self._model_config.reduction_layer
 
         self._n_features = 0
 
@@ -474,35 +293,24 @@ class IFENetClassifier(_IFEModule):
         for l in range(0, self._clf_num_layers):
             clf_hidden_layers.append(tf.keras.layers.Dense(units=self._clf_hidden_units[l], activation='relu'))
             clf_hidden_layers.append(tf.keras.layers.Dropout(rate=self._clf_dropout))
-
-        if self._reduction == 'flatten':
-            self._reduction_layer = tf.keras.layers.Flatten(name=f"{self.name}/flatten")
-        elif self._reduction == 'average':
-            self._reduction_layer = tf.keras.layers.GlobalAveragePooling1D(name=f"{self.name}/global_average_pooling")
-        elif self._reduction == 'max':
-            self._reduction_layer = tf.keras.layers.GlobalMaxPooling1D(name=f"{self.name}/global_max_pooling")
         
         self.clf_hidden_layers = tf.keras.Sequential(clf_hidden_layers, name=f"{self.name}/fc_hidden_layers")
         self.fc_out = tf.keras.layers.Dense(units=n_outputs, activation=self.target_activation, name=f"{self.name}/fc_out")
         self.is_built = True
     
-    def call(self, inputs): # (batch, n_features)
+    def call(self, inputs, training=False): # (batch, n_features)
         # preprocessing the inputs
-        features = [self._encoder_layers[name](inputs[name]) for name in self._encoder_layers]
+        features = [self._encoder_layers[name](inputs[name], training=training) for name in self._encoder_layers]
         features = tf.concat(features, axis=1)
         
         # features are the preprocessed inputs
-        batch_size = tf.shape(features)[0]
-        x = self._preprocess(features) # (batch, n_features)
+        # batch_size = tf.shape(features)[0]      
+        x = self._preprocess(features, training=training) # (batch, n_features)
         
-        x_bcast = tf.broadcast_to(x, [self._num_att, batch_size, self._n_features]) # expand and broadcast it to the shape of input_scores
-        
-        self.input_scores = self._ife_attn(x)
-        x = x_bcast * self.input_scores
-        x = tf.transpose(x, perm=(1,0,2))
-        x = self._reduction_layer(x)
-        x = self.clf_hidden_layers(x)
-        outputs = self.fc_out(x)
+        self.input_scores = self._ife_attn(x, training=training)
+        x = x * self.input_scores
+        x = self.clf_hidden_layers(x, training=training)
+        outputs = self.fc_out(x, training=training)
         
         return outputs
 
@@ -513,13 +321,15 @@ class IFENetClassifier(_IFEModule):
         # Serialize the layer configurations for the layers created in build_model
         preprocess_config = self._preprocess.get_config()  
         ife_attn_config = self._ife_attn.get_config()  
-        reduction_config = self._reduction_layer.get_config()
-        # clf_hidden_layers_config = [layer.get_config() for layer in self.clf_hidden_layers.layers]
         clf_hidden_layers_config = self.clf_hidden_layers.get_config()
         fc_out_config = self.fc_out.get_config()
 
         # Serialize the encoder layers (which are created dynamically)
-        encoder_layers_config = {name: serialize_keras_object(layer) for name, layer in self._encoder_layers.items()}
+        # encoder_layers_config = {name: serialize_keras_object(layer) for name, layer in self._encoder_layers.items()}
+        encoder_layers_config = {name: layer.get_config() for name, layer in self._encoder_layers.items()}
+        encoder_layers_classes = {
+            name: layer.__class__.__name__ for name, layer in self._encoder_layers.items()
+        }
         
         config = {
             **base_config,
@@ -529,14 +339,13 @@ class IFENetClassifier(_IFEModule):
             "clf_num_layers": self._clf_num_layers,
             "clf_hidden_units": self._clf_hidden_units,
             "clf_dropout": self._clf_dropout,
-            "reduction": self._reduction,
-            "feature_indices": self.feature_indices,   
-            "reduction_layer": reduction_config,
+            "feature_indices": self.feature_indices,
             "preprocess_config": preprocess_config,
             "ife_attn_config": ife_attn_config,
             "clf_hidden_layers_config": clf_hidden_layers_config,
             "fc_out_config": fc_out_config,
-            "encoder_layers": encoder_layers_config,
+            "encoder_layers_config": encoder_layers_config,
+            "encoder_layers_classes": encoder_layers_classes
         }
         return config
 
@@ -555,7 +364,6 @@ class IFENetClassifier(_IFEModule):
         instance._clf_num_layers = config["clf_num_layers"]
         instance._clf_hidden_units = config["clf_hidden_units"]
         instance._clf_dropout = config["clf_dropout"]
-        instance._reduction = config["reduction"]
         instance._n_features = config["n_features"]        
         instance.feature_indices = config["feature_indices"]
     
@@ -565,11 +373,20 @@ class IFENetClassifier(_IFEModule):
         instance.clf_hidden_layers = tf.keras.Sequential.from_config(config["clf_hidden_layers_config"])
         instance.fc_out = tf.keras.layers.Dense.from_config(config["fc_out_config"])
 
-        instance._reduction_layer = tf.keras.layers.Flatten() if instance._reduction == "flatten" else tf.keras.layers.GlobalAveragePooling1D()
-
         # Deserialize the encoder layers and assign them to the model
-        encoder_layers = {name: deserialize_keras_object(layer_config) for name, layer_config in config["encoder_layers"].items()}
-        instance._encoder_layers = encoder_layers
+        # encoder_layers = {name: deserialize_keras_object(layer_config) for name, layer_config in config["encoder_layers_config"].items()}
+        encoder_layers_config = config["encoder_layers_config"]
+        encoder_layers_classes = config["encoder_layers_classes"]
+        for name, layer_class_name in encoder_layers_classes.items():
+            if layer_class_name == "_CategoricalEncodingLayer":
+                layer_class = _CategoricalEncodingLayer
+            elif layer_class_name == "_NumericalEncodingLayer":
+                layer_class = _NumericalEncodingLayer
+            else:
+                raise ValueError(f"Unknown encoder layer class: {layer_class_name}")
+    
+            layer = layer_class.from_config(encoder_layers_config[name])
+            instance._encoder_layers[name] = layer
     
         return instance
         
