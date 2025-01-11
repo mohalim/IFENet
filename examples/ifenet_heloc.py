@@ -49,10 +49,14 @@ vald_ds = dataframe_to_dataset(vald, target_columns, shuffle=False, batch_size=b
 test_ds = dataframe_to_dataset(test, target_columns, shuffle=False, batch_size=batch_size)
 
 # define configs using DataConfig and ModelConfig
-# DataConfig is used to define data related configurations like the categorical columns, numerical columns, encoding output mode for categorical columns ('one_hot' or 'multi_hot') and normalization (True or False) for numerical columns.
+# DataConfig is used to define data related configurations like the categorical columns, numerical columns, encoding type for categorical columns ('embedding' or 'category')
+# If 'embedding', the embedding_output_dim is set to 'auto' or an integer 
+# If 'category', the category_output_mode is set to 'one_hot' or 'multi_hot'
+# is_normalization (True or False) is for numerical columns.
 data_config = DataConfig(categorical_column_names=cat_col_names, 
                          numerical_column_names=num_col_names,
-                         category_output_mode='one_hot',
+                         encode_category = 'embedding',
+                         embedding_output_dim = 'auto',
                          is_normalization=False)
 
 # ModelConfig is used to define model related configurations. IFENet has five parameters:
@@ -78,14 +82,14 @@ loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 
 # we can use callbacks to implement to save the model during training (modelcheckpoint) and early stopping (optional)
-checkpoint_path = 'checkpoints/ifeNet_heloc.h5'
+checkpoint_path = 'checkpoints/ifeNet_heloc.hdf5'
 patience = 20
 callbacks = [tf.keras.callbacks.EarlyStopping(patience=patience, monitor='val_accuracy'),
-             tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, monitor='val_accuracy')]
+             tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, save_best_only=True, save_weights_only=True, monitor='val_accuracy')]
 
 # train and evaluate the model
 model.compile(optimizer=optimizer, loss=loss_fn, metrics=['accuracy'])
-model.fit(train_ds, validation_data=vald_ds, epochs=100, callbacks=callbacks)
+model.fit(train_ds, validation_data=vald_ds, epochs=100, callbacks=callbacks, verbose=2)
 model.evaluate(test_ds)
 
 # perform a prediction on a batch of data. The model will compute the feature importance scores of the data
@@ -100,4 +104,4 @@ saved_model_path = 'saved_models/ifeNet_heloc.keras'
 model.save(saved_model_path)
 
 # load the model (for later use)
-new_model = tf.keras.models.load_model(saved_model_path, safe_mode=False)
+new_model = tf.keras.models.load_model(saved_model_path)
