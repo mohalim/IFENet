@@ -290,7 +290,7 @@ class _IntegerLookup(tf.keras.layers.Layer):
             self.vocab_size = len(vocabulary)
 
     def adapt(self, data):
-        print(f'adapt: {self.vocabulary}')
+        # print(f'adapt: {self.vocabulary}')
         if self.vocabulary is None:
             if isinstance(data, tf.data.Dataset):
                 data = list(data.as_numpy_iterator())[0]
