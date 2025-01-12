@@ -22,8 +22,7 @@ data_config = DataConfig(categorical_column_names=cat_col_names,
 model_config = ModelConfig(num_att=16,
                            r=3.5,
                            clf_num_layers=1,
-                           clf_hidden_units=[32],
-                           reduction_layer='flatten')
+                           clf_hidden_units=[32])
 
 model = IFENetClassifier(data_config, model_config)
 # or
