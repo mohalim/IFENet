@@ -85,7 +85,7 @@ class _IFEModule(tf.keras.Model):
             msg = "Please perform a prediction first to compute the feature importance scores."
             print("\033[91m {}\033[00m" .format(msg))
 
-    def fit(self, train_ds, validation_data=None, epochs=1, batch_size=None, verbose=1, callbacks=None):
+    def fit(self, train_ds, validation_data=None, epochs=1, batch_size=None, class_weight=None, sample_weight=None, verbose=2, callbacks=None):
         """
         Override fit to ensure model is built before training.
         """
@@ -93,7 +93,14 @@ class _IFEModule(tf.keras.Model):
             raise ValueError("Model has not been built. Please run `model.build_model(train_ds)` before calling `fit()`.")
 
         # Call the original fit() method (or perform custom training loop if needed)
-        super(_IFEModule, self).fit(train_ds, validation_data=validation_data, epochs=epochs, batch_size=batch_size, verbose=verbose, callbacks=callbacks)
+        super(_IFEModule, self).fit(train_ds, 
+                                    validation_data=validation_data, 
+                                    epochs=epochs, 
+                                    batch_size=batch_size, 
+                                    verbose=verbose, 
+                                    class_weight=class_weight,
+                                    sample_weight=sample_weight,
+                                    callbacks=callbacks)
 
     def get_config(self):
         base_config = super(_IFEModule, self).get_config()
