@@ -64,12 +64,10 @@ data_config = DataConfig(categorical_column_names=cat_col_names,
 # 2. scaling factor (r): float
 # 3. number of hidden layers in preditive module (clf_num_layers): integer
 # 4. number of units for each hidden layer (clf_hidden_units): list of integers
-# 5. reduction layer type (reduction_layer): "flatten" or "average"
 model_config = ModelConfig(num_att=16,
                            r=3.5,
                            clf_num_layers=1,
-                           clf_hidden_units=[32],
-                           reduction_layer='flatten')
+                           clf_hidden_units=[32])
 
 # create the model by passing the configs
 model = IFENetClassifier(data_config, model_config)
