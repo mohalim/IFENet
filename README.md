@@ -9,8 +9,9 @@ from models import IFENetClassifier
 from config import DataConfig, ModelConfig
 from utility import dataframe_to_dataset
 
-# Convert the training set DataFrame to tf.data.Dataset
-train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=256)
+# Convert the training and validation sets DataFrame to tf.data.Dataset
+train_ds = dataframe_to_dataset(train, target_columns, shuffle=True, batch_size=64)
+vald_ds = dataframe_to_dataset(vald, target_columns, shuffle=False)
 
 data_config = DataConfig(categorical_column_names=cat_col_names, 
                          numerical_column_names=num_col_names,
