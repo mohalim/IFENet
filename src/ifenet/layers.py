@@ -398,7 +398,7 @@ class _CategoricalEncodingLayer(tf.keras.layers.Layer):
                     # for example, for 10 categories, output_dim is 3
                     # we use self.index.vocabulary_size() for num. of unique tokens            
                     if self.output_dim is None:
-                        self.output_dim = int(min(10, max(2, vocab_size)))
+                        self.output_dim = int(min(10, max(2, math.sqrt(vocab_size))))
                 else:
                     if self.output_dim is None:
                         self.output_dim = self.embedding_output_dim
